@@ -1,6 +1,4 @@
 include:
-  - artifact: test_board
-    board: xiao_ble
+  - artifact: module_template_board
+    board: xiao_ble//zmk
     shield: tester_xiao
-
----

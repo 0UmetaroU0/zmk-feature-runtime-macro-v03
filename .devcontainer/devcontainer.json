@@ -3,7 +3,9 @@
   "image": "docker.io/zmkfirmware/zmk-dev-arm:4.1",
   "containerEnv": {
     "WORKSPACE_DIR": "${containerWorkspaceFolder}",
-    "PROMPT_COMMAND": "history -a"
+    "PROMPT_COMMAND": "history -a",
+    // Required to share /root with other containers
+    "Zephyr_DIR": "${containerWorkspaceFolder}/dependencies/zephyr/share/zephyr-package/cmake/"
   },
   "mounts": [
     "type=volume,source=zmk-dependencies-v4,target=/${containerWorkspaceFolder}/dependencies",

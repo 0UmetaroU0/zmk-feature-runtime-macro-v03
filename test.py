@@ -23,6 +23,14 @@ class NotFound:
     text: str
 
 
+@dataclass
+class ConfigAndDeviceTree:
+    # Expected rows in .config
+    config: list[str | NotFound]
+    # Expected rows in devicetree_generated.h
+    device: list[str | NotFound]
+
+
 class WestCommandsTests(unittest.TestCase):
     WEST_TOPDIR: Path
     BUILD_DIR: Path
@@ -36,47 +44,79 @@ class WestCommandsTests(unittest.TestCase):
         platform.system() == "Linux", "zmk-test is only supported on Linux"
     )
     def test_zmk_test(self):
-        tests_build = self.BUILD_DIR / "tests"
-        shutil.rmtree(tests_build, ignore_errors=True)
+        test_build_dir = self.BUILD_DIR / THIS_DIR.name
+        shutil.rmtree(test_build_dir, ignore_errors=True)
 
-        result = run_west(["zmk-test", "tests", "-m", "."])
+        result = run_west(["zmk-test", "tests", "-m", ".", "-d", str(test_build_dir)])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS: ", result.stdout, result.stdout + result.stderr)
         self.assertNotIn("FAIL: ", result.stdout, result.stdout + result.stderr)
 
     def test_zmk_build(self):
-        artifacts_and_expected_config: dict[str, list[str | NotFound]] = {
-            "test_board": [
-                # Verify that the config entry is present
-                'CONFIG_ZMK_KEYBOARD_NAME="Module Test"',
-                # Verify that this config entry is not present
-                NotFound("CONFIG_SHOULD_NOT_EXIST"),
-            ],
-        }
+        self._test_zmk_build(
+            {
+                "module_template_board": ConfigAndDeviceTree(
+                    config=[
+                        # Verify that the config entry is present
+                        'CONFIG_ZMK_KEYBOARD_NAME="Module Test"',
+                        "CONFIG_ZMK_USB=y",
+                        "CONFIG_ZMK_BLE=y",
+                        # Verify that this config entry is not present
+                        NotFound("CONFIG_SHOULD_NOT_EXIST"),
+                    ],
+                    device=[
+                        "DT_COMPAT_HAS_OKAY_zmk_keymap",
+                    ],
+                ),
+            }
+        )
 
-        for artifact in artifacts_and_expected_config.keys():
+    def _test_zmk_build(
+        self, artifacts_and_expected_build_params: dict[str, ConfigAndDeviceTree]
+    ):
+
+        for artifact in artifacts_and_expected_build_params.keys():
             shutil.rmtree(self.BUILD_DIR / artifact, ignore_errors=True)
 
         result = run_west(["zmk-build", "tests/zmk-config/config", "-q"])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-        for artifact, entries in artifacts_and_expected_config.items():
-            config_path = self.BUILD_DIR / artifact / "zephyr" / ".config"
-            self.assertTrue(config_path.exists(), f"{artifact} .config is missing")
-            config_text = config_path.read_text()
-            for entry in entries:
-                if isinstance(entry, NotFound):
-                    if entry.text in config_text:
-                        self.fail(
-                            f"{entry.text} found in {config_path} for {artifact}, but it should not be present"
-                        )
-                else:
-                    if entry not in config_text:
-                        self.fail(f"{entry} not found in {config_path} for {artifact}")
-            self.assertTrue(
-                (config_path.parent / "zmk.uf2").exists(),
-                f"{artifact} zmk.uf2 is missing in {config_path.parent}",
+        for artifact, entries in artifacts_and_expected_build_params.items():
+            artifact_dir = self.BUILD_DIR / artifact / "zephyr"
+            config_path = artifact_dir / ".config"
+            device_tree_path = (
+                artifact_dir
+                / "include"
+                / "generated"
+                / "zephyr"
+                / "devicetree_generated.h"
             )
+            self._test_strings_in_file(
+                config_path, entries.config, f"{artifact} config"
+            )
+            self._test_strings_in_file(
+                device_tree_path, entries.device, f"{artifact} device tree"
+            )
+            self.assertTrue(
+                (artifact_dir / "zmk.uf2").exists(),
+                f"{artifact} zmk.uf2 is missing in {artifact_dir}",
+            )
+
+    def _test_strings_in_file(
+        self, file_path: Path, expected_strings: list[str | NotFound], hint: str
+    ):
+        self.assertTrue(file_path.exists(), f"{hint}: {file_path} is missing")
+        file_text = file_path.read_text()
+
+        for expected in expected_strings:
+            if isinstance(expected, NotFound):
+                if expected.text in file_text:
+                    self.fail(
+                        f"{hint}: {expected.text} found in {file_path}, but it should not be present"
+                    )
+            else:
+                if expected not in file_text:
+                    self.fail(f"{hint}: {expected} not found in {file_path}")
 
 
 if __name__ == "__main__":

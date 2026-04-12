@@ -1,0 +1,30 @@
+{
+  "worktree": {
+    "symlinkDirectories": ["dependencies", ".west"]
+  },
+  "permissions": {
+    "deny": ["Bash(*git* push* main*)"]
+  },
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": ["~/.cmake/", "/workspaces/"],
+      "allowRead": ["/workspaces/"]
+    },
+    "network": {
+      "allowedDomains": ["github.com"]
+    }
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Verify README.md is properly updated for module users. $ARGUMENTS"
+          }
+        ]
+      }
+    ]
+  }
+}

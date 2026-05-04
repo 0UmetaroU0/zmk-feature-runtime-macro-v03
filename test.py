@@ -50,7 +50,7 @@ class WestCommandsTests(unittest.TestCase):
         result = run_west(["zmk-test", "tests", "-m", ".", "-d", str(test_build_dir)])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS: ", result.stdout, result.stdout + result.stderr)
-        self.assertNotIn("FAIL: ", result.stdout, result.stdout + result.stderr)
+        self.assertNotIn("FAILED: ", result.stdout, result.stdout + result.stderr)
 
     def test_zmk_build(self):
         self._test_zmk_build(

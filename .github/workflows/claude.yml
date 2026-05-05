@@ -37,6 +37,8 @@ jobs:
         with:
           fetch-depth: 1
       - uses: ./.github/actions/west-init
+      - name: Install unzip
+        run: apt-get update && apt-get install -y unzip
       - name: Run Claude Code
         # Skip for push event. Push event handling is just for verifying CI works
         if: github.event_name != 'push'

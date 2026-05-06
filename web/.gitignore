@@ -27,3 +27,5 @@ src/proto/**/*.ts
 
 # Test coverage
 coverage
+
+.vite

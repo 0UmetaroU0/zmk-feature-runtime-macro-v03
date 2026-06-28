@@ -56,30 +56,37 @@ class WestCommandsTests(unittest.TestCase):
     def test_zmk_build(self):
         self._test_zmk_build(
             {
-                "module_template_board_feature_disabled": ConfigAndDeviceTree(
+                "runtime_macro_board_feature_disabled": ConfigAndDeviceTree(
                     config=[
                         'CONFIG_ZMK_KEYBOARD_NAME="Module Test"',
                         "CONFIG_ZMK_USB=y",
                         "CONFIG_ZMK_BLE=y",
-                        "# CONFIG_ZMK_TEMPLATE_FEATURE is not set",
+                        "# CONFIG_ZMK_RUNTIME_MACRO is not set",
                     ],
                     device=[
                         "DT_COMPAT_HAS_OKAY_zmk_keymap",
                     ],
                 ),
-                "module_template_board_with_rpc": ConfigAndDeviceTree(
+                "runtime_macro_board_with_rpc": ConfigAndDeviceTree(
                     config=[
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO_STUDIO_RPC=y",
+                        "CONFIG_ZMK_BEHAVIOR_LOCAL_ID_TYPE_CRC16=y",
+                        "CONFIG_ZMK_CUSTOM_SETTINGS=y",
+                        "CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=192",
                     ],
                     device=[],
                 ),
-                "module_template_board_without_rpc": ConfigAndDeviceTree(
+                "runtime_macro_board_without_rpc": ConfigAndDeviceTree(
                     config=[
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO_TEST=y",
+                        "CONFIG_ZMK_BEHAVIOR_LOCAL_ID_TYPE_CRC16=y",
+                        "CONFIG_ZMK_CUSTOM_SETTINGS=y",
                         "# CONFIG_ZMK_STUDIO is not set",
-                        NotFound("CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC"),
+                        NotFound("CONFIG_ZMK_RUNTIME_MACRO_STUDIO_RPC"),
                     ],
                     device=[],
                 ),
@@ -88,11 +95,12 @@ class WestCommandsTests(unittest.TestCase):
                         # Verify that zmk-feature-custom-settings is present and enabled
                         "zmk-feature-custom-settings",
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO=y",
+                        "CONFIG_ZMK_RUNTIME_MACRO_STUDIO_RPC=y",
+                        "CONFIG_ZMK_BEHAVIOR_LOCAL_ID_TYPE_CRC16=y",
                         "CONFIG_ZMK_CUSTOM_SETTINGS=y",
                         "CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y",
-                        "CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=128",
+                        "CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=192",
                         "CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE=2048",
                     ],
                     device=[],

@@ -19,6 +19,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#define RUNTIME_MACRO_RPC_MAX_STEPS 32
+
 static bool runtime_macro_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
                                              pb_callback_t *encode_response);
 
@@ -378,32 +380,104 @@ static int handle_set_macro_name(const cormoran_runtime_macro_SetMacroNameReques
     return 0;
 }
 
-static int handle_set_macro_steps(const cormoran_runtime_macro_SetMacroStepsRequest *req,
-                                  cormoran_runtime_macro_Response *resp) {
-    uint8_t encoded[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE];
+static int read_macro_steps(uint32_t index, char *name, size_t name_size,
+                            cormoran_runtime_macro_MacroStep *steps, pb_size_t *steps_count,
+                            pb_size_t steps_capacity) {
     uint8_t current_encoded[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE];
+    size_t current_encoded_size = 0;
+
+    int ret = zmk_runtime_macro_read(index, name, name_size, current_encoded,
+                                     sizeof(current_encoded), &current_encoded_size);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return decode_steps(current_encoded, current_encoded_size, steps, steps_count, steps_capacity);
+}
+
+static int write_macro_steps(uint32_t index, const char *name,
+                             const cormoran_runtime_macro_MacroStep *steps, pb_size_t steps_count,
+                             bool persist) {
+    uint8_t encoded[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE];
     size_t encoded_size = 0;
+
+    int ret = encode_steps(steps, steps_count, encoded, sizeof(encoded), &encoded_size);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return zmk_runtime_macro_write(index, name, encoded, encoded_size, persist);
+}
+
+static int handle_set_macro_step_count(const cormoran_runtime_macro_SetMacroStepCountRequest *req,
+                                       cormoran_runtime_macro_Response *resp) {
+    cormoran_runtime_macro_MacroStep steps[RUNTIME_MACRO_RPC_MAX_STEPS];
+    pb_size_t steps_count = 0;
     char name[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE + 1];
 
-    int ret = encode_steps(req->steps, req->steps_count, encoded, sizeof(encoded), &encoded_size);
+    if (req->step_count > ARRAY_SIZE(steps)) {
+        return -ERANGE;
+    }
+
+    int ret =
+        read_macro_steps(req->index, name, sizeof(name), steps, &steps_count, ARRAY_SIZE(steps));
     if (ret < 0) {
         return ret;
     }
 
-    ret = zmk_runtime_macro_read(req->index, name, sizeof(name), current_encoded,
-                                 sizeof(current_encoded), NULL);
-    if (ret < 0) {
-        return ret;
+    while (steps_count < req->step_count) {
+        cormoran_runtime_macro_MacroStep *step = &steps[steps_count++];
+        *step = (cormoran_runtime_macro_MacroStep)cormoran_runtime_macro_MacroStep_init_zero;
+        step->which_step = cormoran_runtime_macro_MacroStep_delay_tag;
+        step->step.delay.delay_ms = 0;
     }
+    steps_count = req->step_count;
 
-    ret = zmk_runtime_macro_write(req->index, name, encoded, encoded_size, req->persist);
+    ret = write_macro_steps(req->index, name, steps, steps_count, req->persist);
     if (ret < 0) {
         return ret;
     }
 
     cormoran_runtime_macro_StatusResponse result = cormoran_runtime_macro_StatusResponse_init_zero;
     result.affected_count = 1;
-    snprintf(result.message, sizeof(result.message), "Macro %u steps updated", req->index);
+    snprintf(result.message, sizeof(result.message), "Macro %u step count updated", req->index);
+
+    resp->which_response_type = cormoran_runtime_macro_Response_status_tag;
+    resp->response_type.status = result;
+
+    return 0;
+}
+
+static int handle_set_macro_step(const cormoran_runtime_macro_SetMacroStepRequest *req,
+                                 cormoran_runtime_macro_Response *resp) {
+    cormoran_runtime_macro_MacroStep steps[RUNTIME_MACRO_RPC_MAX_STEPS];
+    pb_size_t steps_count = 0;
+    char name[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE + 1];
+
+    if (!req->has_step) {
+        return -EINVAL;
+    }
+
+    int ret =
+        read_macro_steps(req->index, name, sizeof(name), steps, &steps_count, ARRAY_SIZE(steps));
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (req->step_index >= steps_count) {
+        return -ERANGE;
+    }
+
+    steps[req->step_index] = req->step;
+    ret = write_macro_steps(req->index, name, steps, steps_count, req->persist);
+    if (ret < 0) {
+        return ret;
+    }
+
+    cormoran_runtime_macro_StatusResponse result = cormoran_runtime_macro_StatusResponse_init_zero;
+    result.affected_count = 1;
+    snprintf(result.message, sizeof(result.message), "Macro %u step %u updated", req->index,
+             req->step_index);
 
     resp->which_response_type = cormoran_runtime_macro_Response_status_tag;
     resp->response_type.status = result;
@@ -438,14 +512,17 @@ static bool runtime_macro_rpc_handle_request(const zmk_custom_CallRequest *raw_r
     case cormoran_runtime_macro_Request_set_macro_name_tag:
         ret = handle_set_macro_name(&req.request_type.set_macro_name, resp);
         break;
-    case cormoran_runtime_macro_Request_set_macro_steps_tag:
-        ret = handle_set_macro_steps(&req.request_type.set_macro_steps, resp);
+    case cormoran_runtime_macro_Request_set_macro_step_count_tag:
+        ret = handle_set_macro_step_count(&req.request_type.set_macro_step_count, resp);
         break;
     case cormoran_runtime_macro_Request_get_macro_global_settings_tag:
         ret = handle_get_macro_global_settings(resp);
         break;
     case cormoran_runtime_macro_Request_set_tap_ms_tag:
         ret = handle_set_tap_ms(&req.request_type.set_tap_ms, resp);
+        break;
+    case cormoran_runtime_macro_Request_set_macro_step_tag:
+        ret = handle_set_macro_step(&req.request_type.set_macro_step, resp);
         break;
     default:
         ret = -ENOTSUP;

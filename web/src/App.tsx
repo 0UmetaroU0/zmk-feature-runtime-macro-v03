@@ -263,13 +263,25 @@ export function RuntimeMacroEditor() {
       );
       await callRPC(
         Request.create({
-          setMacroSteps: {
+          setMacroStepCount: {
             index: loadedMacro.index,
-            steps: loadedMacro.steps.map(runtimeStepToRpc),
+            stepCount: loadedMacro.steps.length,
             persist,
           },
         })
       );
+      for (const [stepIndex, step] of loadedMacro.steps.entries()) {
+        await callRPC(
+          Request.create({
+            setMacroStep: {
+              index: loadedMacro.index,
+              stepIndex,
+              step: runtimeStepToRpc(step),
+              persist,
+            },
+          })
+        );
+      }
 
       setJsonText(
         JSON.stringify(toKeyboardAbyssSteps(loadedMacro.steps), null, 2)

@@ -44,10 +44,17 @@ message SetMacroNameRequest {
     bool persist = 3;
 }
 
-message SetMacroStepsRequest {
+message SetMacroStepCountRequest {
     uint32 index = 1;
-    repeated MacroStep steps = 2;
+    uint32 step_count = 2;
     bool persist = 3;
+}
+
+message SetMacroStepRequest {
+    uint32 index = 1;
+    uint32 step_index = 2;
+    MacroStep step = 3;
+    bool persist = 4;
 }
 
 message SetTapMsRequest {
@@ -60,9 +67,10 @@ message Request {
         ListMacrosRequest list_macros = 1;
         GetMacroRequest get_macro = 2;
         SetMacroNameRequest set_macro_name = 3;
-        SetMacroStepsRequest set_macro_steps = 4;
+        SetMacroStepCountRequest set_macro_step_count = 4;
         GetMacroGlobalSettingsRequest get_macro_global_settings = 5;
         SetTapMsRequest set_tap_ms = 6;
+        SetMacroStepRequest set_macro_step = 7;
     }
 }
 

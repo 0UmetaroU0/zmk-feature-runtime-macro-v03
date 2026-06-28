@@ -62,6 +62,11 @@ message SetTapMsRequest {
     bool persist = 2;
 }
 
+message DeleteMacroRequest {
+    uint32 index = 1;
+    bool persist = 2;
+}
+
 message Request {
     oneof request_type {
         ListMacrosRequest list_macros = 1;
@@ -71,6 +76,7 @@ message Request {
         GetMacroGlobalSettingsRequest get_macro_global_settings = 5;
         SetTapMsRequest set_tap_ms = 6;
         SetMacroStepRequest set_macro_step = 7;
+        DeleteMacroRequest delete_macro = 8;
     }
 }
 

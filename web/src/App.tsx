@@ -326,6 +326,35 @@ export function RuntimeMacroEditor() {
     }
   };
 
+  const deleteMacro = async (persist: boolean) => {
+    if (!loadedMacro) return;
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      await callRPC(
+        Request.create({
+          deleteMacro: {
+            index: loadedMacro.index,
+            persist,
+          },
+        })
+      );
+      setLoadedMacro({ index: loadedMacro.index, name: "", steps: [] });
+      setJsonText("[]");
+      setMessage(
+        persist ? "Deleted from persistent settings" : "Deleted in memory"
+      );
+      await refreshList();
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Failed to delete macro"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const importJson = () => {
     if (!loadedMacro) return;
     try {
@@ -452,6 +481,20 @@ export function RuntimeMacroEditor() {
                 disabled={isLoading}
               >
                 Save
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => deleteMacro(false)}
+                disabled={isLoading}
+              >
+                Delete Memory
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => deleteMacro(true)}
+                disabled={isLoading}
+              >
+                Delete Saved
               </button>
             </div>
 

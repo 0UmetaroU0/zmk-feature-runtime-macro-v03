@@ -26,7 +26,7 @@ static bool runtime_macro_rpc_handle_request(const zmk_custom_CallRequest *raw_r
 
 static struct zmk_rpc_custom_subsystem_meta runtime_macro_meta = {
     ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS("https://cormoran.github.io/zmk-feature-runtime-macro/"),
-    .security = ZMK_STUDIO_RPC_HANDLER_UNSECURED,
+    .security = ZMK_STUDIO_RPC_HANDLER_SECURED,
 };
 
 ZMK_RPC_CUSTOM_SUBSYSTEM(cormoran__runtime_macro, &runtime_macro_meta,

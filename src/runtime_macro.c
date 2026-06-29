@@ -33,6 +33,30 @@ struct runtime_macro_queue_item {
     struct zmk_behavior_binding binding;
 };
 
+struct runtime_macro_player {
+    struct k_mutex lock;
+    struct k_work play_work;
+    struct k_work_delayable clear_active_work;
+    bool active;
+    uint32_t index;
+    struct zmk_behavior_binding_event event;
+    struct zmk_custom_setting_value body_value;
+    uint8_t encoded[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE];
+    struct runtime_macro_queue_item items[CONFIG_ZMK_RUNTIME_MACRO_QUEUE_SIZE];
+};
+
+static void runtime_macro_play_work_handler(struct k_work *work);
+static void runtime_macro_clear_active_work_handler(struct k_work *work);
+static int queue_runtime_macro(const struct runtime_macro_queue_item *items, size_t count,
+                               const struct zmk_behavior_binding_event *event,
+                               uint32_t *queued_duration_ms);
+
+static struct runtime_macro_player player = {
+    .lock = Z_MUTEX_INITIALIZER(player.lock),
+    .play_work = Z_WORK_INITIALIZER(runtime_macro_play_work_handler),
+    .clear_active_work = Z_WORK_DELAYABLE_INITIALIZER(runtime_macro_clear_active_work_handler),
+};
+
 static int on_runtime_macro_wait_pressed(struct zmk_behavior_binding *binding,
                                          struct zmk_behavior_binding_event event) {
     ARG_UNUSED(binding);
@@ -96,6 +120,9 @@ static int read_uvar(const uint8_t *encoded, size_t size, size_t *offset, uint32
 
     while (*offset < size && shift <= 28) {
         uint8_t byte = encoded[(*offset)++];
+        if (shift == 28 && (byte & 0xf0) != 0) {
+            return -EINVAL;
+        }
         result |= (uint32_t)(byte & 0x7f) << shift;
 
         if ((byte & 0x80) == 0) {
@@ -115,6 +142,9 @@ static int read_binding(const uint8_t *encoded, size_t size, size_t *offset,
     int ret = read_uvar(encoded, size, offset, &behavior_id);
     if (ret < 0) {
         return ret;
+    }
+    if (behavior_id > UINT16_MAX) {
+        return -ERANGE;
     }
 
     const char *behavior_name =
@@ -149,7 +179,10 @@ static int append_item(struct runtime_macro_queue_item *items, size_t *count,
         return -ENOSPC;
     }
 
-    items[(*count)++] = item;
+    if (items) {
+        items[*count] = item;
+    }
+    (*count)++;
     return 0;
 }
 
@@ -251,6 +284,92 @@ static uint32_t get_runtime_macro_tap_ms(void) {
     return MIN(value.int32_value, 10000);
 }
 
+static void runtime_macro_clear_active_work_handler(struct k_work *work) {
+    ARG_UNUSED(work);
+
+    k_mutex_lock(&player.lock, K_FOREVER);
+    player.active = false;
+    k_mutex_unlock(&player.lock);
+}
+
+static int runtime_macro_start_playback(uint32_t index,
+                                        const struct zmk_behavior_binding_event *event) {
+    k_mutex_lock(&player.lock, K_FOREVER);
+    if (player.active) {
+        k_mutex_unlock(&player.lock);
+        return -EBUSY;
+    }
+
+    k_work_cancel_delayable(&player.clear_active_work);
+    player.index = index;
+    player.event = *event;
+    player.active = true;
+    k_mutex_unlock(&player.lock);
+
+    int ret = k_work_submit(&player.play_work);
+    if (ret < 0) {
+        runtime_macro_clear_active_work_handler(&player.clear_active_work.work);
+        return ret;
+    }
+
+    return 0;
+}
+
+static void runtime_macro_finish_playback(uint32_t active_ms) {
+    if (active_ms == 0) {
+        runtime_macro_clear_active_work_handler(&player.clear_active_work.work);
+        return;
+    }
+
+    uint32_t clear_delay_ms = active_ms == UINT32_MAX ? UINT32_MAX : active_ms + 1;
+    k_work_schedule(&player.clear_active_work, K_MSEC(clear_delay_ms));
+}
+
+static void runtime_macro_play_work_handler(struct k_work *work) {
+    ARG_UNUSED(work);
+
+    k_mutex_lock(&player.lock, K_FOREVER);
+    uint32_t index = player.index;
+    struct zmk_behavior_binding_event event = player.event;
+    k_mutex_unlock(&player.lock);
+
+    int ret = zmk_custom_setting_read_array_by_key(
+        ZMK_RUNTIME_MACRO_SUBSYSTEM_ID, ZMK_RUNTIME_MACRO_BODIES_KEY, index, &player.body_value);
+    if (ret < 0) {
+        LOG_WRN("Runtime macro %u body read failed: %d", index, ret);
+        runtime_macro_finish_playback(0);
+        return;
+    }
+
+    if (player.body_value.size > sizeof(player.encoded)) {
+        LOG_WRN("Runtime macro %u body too large: %zu", index, player.body_value.size);
+        runtime_macro_finish_playback(0);
+        return;
+    }
+
+    if (player.body_value.size > 0) {
+        memcpy(player.encoded, player.body_value.bytes_value, player.body_value.size);
+    }
+
+    size_t count = 0;
+    ret = decode_macro(player.encoded, player.body_value.size, player.items, &count);
+    if (ret < 0) {
+        LOG_WRN("Runtime macro %u decode failed: %d", index, ret);
+        runtime_macro_finish_playback(0);
+        return;
+    }
+
+    uint32_t queued_duration_ms = 0;
+    ret = queue_runtime_macro(player.items, count, &event, &queued_duration_ms);
+    if (ret < 0) {
+        LOG_WRN("Runtime macro %u queue failed: %d", index, ret);
+        runtime_macro_finish_playback(0);
+        return;
+    }
+
+    runtime_macro_finish_playback(queued_duration_ms);
+}
+
 static int queue_behavior(const struct zmk_behavior_binding_event *event,
                           const struct zmk_behavior_binding *binding, bool pressed,
                           uint32_t wait_ms) {
@@ -262,9 +381,20 @@ static int queue_behavior(const struct zmk_behavior_binding_event *event,
     return ret;
 }
 
+static void add_saturating_delay(uint32_t *total_ms, uint32_t delay_ms) {
+    if (UINT32_MAX - *total_ms < delay_ms) {
+        *total_ms = UINT32_MAX;
+    } else {
+        *total_ms += delay_ms;
+    }
+}
+
 static int queue_runtime_macro(const struct runtime_macro_queue_item *items, size_t count,
-                               const struct zmk_behavior_binding_event *event) {
+                               const struct zmk_behavior_binding_event *event,
+                               uint32_t *queued_duration_ms) {
     uint32_t pending_delay_ms = 0;
+    *queued_duration_ms = 0;
+
     struct zmk_behavior_binding none_binding = {
         .behavior_dev = RUNTIME_MACRO_WAIT_BEHAVIOR_NAME,
     };
@@ -274,11 +404,7 @@ static int queue_runtime_macro(const struct runtime_macro_queue_item *items, siz
 
         if (item->is_delay) {
             uint32_t delay_ms = item->use_tap_ms ? get_runtime_macro_tap_ms() : item->delay_ms;
-            if (UINT32_MAX - pending_delay_ms < delay_ms) {
-                pending_delay_ms = UINT32_MAX;
-            } else {
-                pending_delay_ms += delay_ms;
-            }
+            add_saturating_delay(&pending_delay_ms, delay_ms);
             continue;
         }
 
@@ -287,6 +413,7 @@ static int queue_runtime_macro(const struct runtime_macro_queue_item *items, siz
             if (ret < 0) {
                 return ret;
             }
+            add_saturating_delay(queued_duration_ms, pending_delay_ms);
             pending_delay_ms = 0;
         }
 
@@ -300,20 +427,24 @@ static int queue_runtime_macro(const struct runtime_macro_queue_item *items, siz
         if (ret < 0) {
             return ret;
         }
+        add_saturating_delay(queued_duration_ms, wait_ms);
     }
 
     if (pending_delay_ms > 0) {
-        return queue_behavior(event, &none_binding, true, pending_delay_ms);
+        int ret = queue_behavior(event, &none_binding, true, pending_delay_ms);
+        if (ret < 0) {
+            return ret;
+        }
+        add_saturating_delay(queued_duration_ms, pending_delay_ms);
     }
 
     return 0;
 }
 
 int zmk_runtime_macro_validate_encoded(const uint8_t *encoded, size_t size) {
-    struct runtime_macro_queue_item items[CONFIG_ZMK_RUNTIME_MACRO_QUEUE_SIZE];
     size_t count;
 
-    return decode_macro(encoded, size, items, &count);
+    return decode_macro(encoded, size, NULL, &count);
 }
 
 int zmk_runtime_macro_read(uint32_t index, char *name, size_t name_capacity, uint8_t *encoded,
@@ -402,20 +533,5 @@ int zmk_runtime_macro_play(uint32_t index, const struct zmk_behavior_binding_eve
         return -ERANGE;
     }
 
-    uint8_t encoded[CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE];
-    size_t encoded_size = 0;
-
-    int ret = zmk_runtime_macro_read(index, NULL, 0, encoded, sizeof(encoded), &encoded_size);
-    if (ret < 0) {
-        return ret;
-    }
-
-    struct runtime_macro_queue_item items[CONFIG_ZMK_RUNTIME_MACRO_QUEUE_SIZE];
-    size_t count = 0;
-    ret = decode_macro(encoded, encoded_size, items, &count);
-    if (ret < 0) {
-        return ret;
-    }
-
-    return queue_runtime_macro(items, count, event);
+    return runtime_macro_start_playback(index, event);
 }

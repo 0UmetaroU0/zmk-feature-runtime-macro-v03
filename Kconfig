@@ -28,4 +28,7 @@ config ZMK_RUNTIME_MACRO_DEFAULT_TAP_MS
 config ZMK_RUNTIME_MACRO_TEST
     bool "Enable runtime macro test setup"
 
+config ZMK_RUNTIME_MACRO_DT_DEFAULTS_TEST
+    bool "Enable devicetree default macro test setup"
+
 endif

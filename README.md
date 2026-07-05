@@ -78,6 +78,52 @@ Open the Web UI from ZMK Studio custom subsystem list, connect over serial, sele
 
 The runtime macro RPC also exposes `MacroGlobalSettings`, containing `tap_ms` and `max_macro`. The get request returns the whole global settings message so future global settings can be added together; writes are per key, such as `set_tap_ms`. `max_macro` is read-only and reports the configured maximum macro slot count.
 
+## Devicetree Default Macros
+
+A macro slot's factory value can be defined at compile time in your `.keymap`/`.overlay`, so an `&rmacro` binding does something useful right after flashing, with no Studio connection required. Add one `cormoran,runtime-macro-default` node per slot:
+
+```dts
+/ {
+    runtime_macro_defaults {
+        rmacro_default_0 {
+            compatible = "cormoran,runtime-macro-default";
+            slot = <0>;
+            display-name = "Email";
+            text = "user@example.com";
+        };
+
+        rmacro_default_1 {
+            compatible = "cormoran,runtime-macro-default";
+            slot = <1>;
+            display-name = "Vim save";
+            bindings = <&macro_press &kp LSHFT>
+                     , <&macro_tap &kp SEMI>
+                     , <&macro_release &kp LSHFT>
+                     , <&macro_wait_time 5>
+                     , <&macro_tap &kp W &kp RET>;
+        };
+    };
+};
+```
+
+| property       | meaning                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| `slot`         | Target macro slot index (`0` to `CONFIG_ZMK_RUNTIME_MACRO_COUNT - 1`), required.                     |
+| `display-name` | Name shown in the Web UI. Defaults to the node name.                                                 |
+| `text`         | Plain ASCII text, encoded first as a packed key-tap sequence (same encoding the Web UI uses).         |
+| `bindings`     | ZMK-native macro steps, encoded after `text`. See below for the supported subset.                    |
+| `wait-ms`      | Delay inserted between consecutive non-packed `bindings` steps. Default `0` (none).                  |
+
+At least one of `text` or `bindings` must be set.
+
+`bindings` reuses ZMK's native macro vocabulary:
+
+- `&macro_tap` / `&macro_press` / `&macro_release` switch the mode applied to entries that follow (initial mode is tap).
+- `&macro_wait_time <ms>` inserts an explicit delay.
+- Any other behavior binding (`&kp A`, `&mo 1`, ...) is encoded using its behavior local ID. Plain-ASCII `&kp` taps in tap mode are packed the same way `text` is.
+
+A default behaves like a factory value: it shows up in the Web UI like any other macro, editing and saving it writes a normal user value that shadows the default, and **Discard Pending** / resetting the setting / erasing settings all bring the devicetree default back. If a default fails to encode (for example an unsupported character in `text`, or a `slot` that doesn't fit `CONFIG_ZMK_RUNTIME_MACRO_COUNT`), that one slot is skipped and logged - it does not fail the rest of the build.
+
 ## Binary Format
 
 Each stored macro body is a byte array:

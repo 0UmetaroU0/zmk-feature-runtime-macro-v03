@@ -1,0 +1,48 @@
+#include <dt-bindings/zmk/keys.h>
+#include <behaviors.dtsi>
+#include <behaviors/runtime_macro.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+
+/ {
+	runtime_macro_defaults {
+		rmacro_default_0 {
+			compatible = "cormoran,runtime-macro-default";
+			slot = <0>;
+			display-name = "Hi";
+			text = "hi";
+		};
+
+		rmacro_default_1 {
+			compatible = "cormoran,runtime-macro-default";
+			slot = <1>;
+			display-name = "Bindings";
+			bindings = <&macro_press &kp LSHFT>
+				 , <&macro_tap &kp A>
+				 , <&macro_release &kp LSHFT>
+				 , <&macro_wait_time 5>
+				 , <&macro_tap &kp B>;
+		};
+	};
+
+	keymap {
+		compatible = "zmk,keymap";
+
+		default_layer {
+			bindings = <
+			&rmacro 0
+			&rmacro 1
+			&kp C
+			&kp D
+			>;
+		};
+	};
+};
+
+&kscan {
+	events = <
+	ZMK_MOCK_PRESS(0,0,10)
+	ZMK_MOCK_RELEASE(0,0,10)
+	ZMK_MOCK_PRESS(0,1,10)
+	ZMK_MOCK_RELEASE(0,1,10)
+	>;
+};

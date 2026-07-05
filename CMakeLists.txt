@@ -2,11 +2,16 @@ zephyr_include_directories(include)
 if(CONFIG_ZMK_RUNTIME_MACRO)
     target_sources(app PRIVATE
         src/runtime_macro.c
+        src/runtime_macro_dt_defaults.c
         src/behaviors/behavior_runtime_macro.c
     )
 
     if(CONFIG_ZMK_RUNTIME_MACRO_TEST)
         target_sources(app PRIVATE src/test/runtime_macro_test.c)
+    endif()
+
+    if(CONFIG_ZMK_RUNTIME_MACRO_DT_DEFAULTS_TEST)
+        target_sources(app PRIVATE src/test/runtime_macro_dt_defaults_test.c)
     endif()
 
     if(CONFIG_ZMK_RUNTIME_MACRO_STUDIO_RPC)

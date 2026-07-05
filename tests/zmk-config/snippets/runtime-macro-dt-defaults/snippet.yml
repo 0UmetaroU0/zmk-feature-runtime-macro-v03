@@ -1,0 +1,3 @@
+name: runtime-macro-dt-defaults
+append:
+  EXTRA_DTC_OVERLAY_FILE: runtime-macro-dt-defaults.overlay

@@ -107,6 +107,17 @@ class WestCommandsTests(unittest.TestCase):
                     ],
                     device=[],
                 ),
+                "runtime_macro_board_dt_defaults": ConfigAndDeviceTree(
+                    config=[
+                        "CONFIG_ZMK_RUNTIME_MACRO=y",
+                        "CONFIG_ZMK_BEHAVIOR_LOCAL_ID_TYPE_CRC16=y",
+                    ],
+                    device=[
+                        # Verify the devicetree default macro node in the
+                        # runtime-macro-dt-defaults snippet was matched and compiled.
+                        "DT_COMPAT_HAS_OKAY_cormoran_runtime_macro_default",
+                    ],
+                ),
             }
         )
 

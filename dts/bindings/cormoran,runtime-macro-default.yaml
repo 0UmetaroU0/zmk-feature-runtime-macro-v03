@@ -1,0 +1,41 @@
+# Copyright (c) 2026 cormoran
+# SPDX-License-Identifier: MIT
+
+description: |
+  Compile-time default value for a runtime macro slot. Installed as the
+  slot's custom-setting default at boot, so it behaves like a factory value:
+  visible and editable in the Web UI, restored by Discard Pending / Reset /
+  settings erase, and shadowed by any value the user writes over RPC.
+
+compatible: "cormoran,runtime-macro-default"
+
+properties:
+  slot:
+    type: int
+    required: true
+    description: Target runtime macro slot index (0-based).
+  display-name:
+    type: string
+    description: Display name shown in the Web UI. Defaults to the node name.
+  text:
+    type: string
+    description: >
+      ASCII text encoded as a compact packed key-tap sequence (same encoding
+      the Web UI uses for consecutive plain-ASCII `&kp` taps). Encoded first,
+      before `bindings`.
+  bindings:
+    type: phandle-array
+    description: >
+      ZMK-native macro step list, encoded after `text`. Supports
+      &macro_tap / &macro_press / &macro_release to switch the mode applied
+      to subsequent entries (initial mode is tap) and &macro_wait_time <ms>
+      for an explicit delay step. Any other behavior binding is encoded
+      using its behavior local ID, consistent with runtime macros written
+      through the RPC. Plain-ASCII &kp taps in tap mode are packed the same
+      way as `text`.
+  wait-ms:
+    type: int
+    default: 0
+    description: >
+      Delay inserted between consecutive non-packed `bindings` steps
+      (default 0 = none). Does not apply inside a packed key-tap run.

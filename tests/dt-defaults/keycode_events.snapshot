@@ -1,0 +1,14 @@
+PASS: runtime_macro_dt_default_installed name=Hi size=5
+PASS: runtime_macro_dt_default_overridden name=Overridden
+PASS: runtime_macro_dt_default_restored_after_reset name=Hi
+zmk: Welcome to ZMK!
+pressed: position 0 keycode 0x7000B
+released: position 0 keycode 0x7000B
+pressed: position 0 keycode 0x7000C
+released: position 0 keycode 0x7000C
+pressed: position 1 keycode 0x700E1
+pressed: position 1 keycode 0x70004
+released: position 1 keycode 0x70004
+released: position 1 keycode 0x700E1
+pressed: position 1 keycode 0x70005
+released: position 1 keycode 0x70005

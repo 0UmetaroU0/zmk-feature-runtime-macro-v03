@@ -6,4 +6,9 @@ manifest:
   projects:
     - name: zmk-feature-custom-settings
       url: https://github.com/cormoran/zmk-feature-custom-settings
-      revision: main
+      # TODO: switch back to `revision: main` once
+      # https://github.com/cormoran/zmk-feature-custom-settings/pull/10 and
+      # https://github.com/cormoran/zmk-feature-custom-settings/pull/11 merge.
+      # Devicetree default macros need zmk_custom_setting_set_default(),
+      # only available on this branch for now.
+      revision: codex/runtime-macro-boot-default

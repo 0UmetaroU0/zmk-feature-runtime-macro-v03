@@ -1,0 +1,16 @@
+/*
+ * A devicetree default macro node doesn't need to be bound to any keymap
+ * position to be valid - it just needs to compile and install at boot, which
+ * is all this build target verifies (see test.py). Real playback is covered
+ * by the native_sim test suite (tests/dt-defaults).
+ */
+/ {
+	runtime_macro_defaults {
+		rmacro_default_0 {
+			compatible = "cormoran,runtime-macro-default";
+			slot = <0>;
+			display-name = "Hi";
+			text = "hi";
+		};
+	};
+};

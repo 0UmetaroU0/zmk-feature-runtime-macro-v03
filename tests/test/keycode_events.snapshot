@@ -1,3 +1,7 @@
 zmk: Welcome to ZMK!
 pressed: position 0 keycode 0x70004
 released: position 0 keycode 0x70004
+pressed: position 1 keycode 0x7000B
+released: position 1 keycode 0x7000B
+pressed: position 1 keycode 0x7000C
+released: position 1 keycode 0x7000C

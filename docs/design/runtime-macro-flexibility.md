@@ -368,6 +368,58 @@ message Notification {
 - State notifications are emitted for *all* recordings, including
   `&rmacro_rec`-initiated ones — the Web UI live view mirrors on-device
   recording for free, and either side may stop a recording the other started.
+- **Security**: a recording captures whatever the user types (potentially
+  passwords), so the recording RPCs and both notification types must require
+  the Studio-unlocked state, mirroring `zmk-feature-input-stream`'s
+  `ZMK_STUDIO_RPC_HANDLER_SECURED` decision. Since security is per-subsystem
+  and the rest of the runtime-macro subsystem is unsecured, enforce it in the
+  handler: reject `StartRecording` while locked, and suppress notifications
+  (not the recording itself — `&rmacro_rec` still works offline) while locked.
+- Implementation pattern: reuse `zmk-feature-input-stream`'s notification
+  pipeline (`src/studio/input_stream_handler.c`) — a fixed-capacity `K_MSGQ`
+  drained by a sender on the low-priority work queue, dropping when full —
+  rather than sending from the event handler.
+
+#### Why not stream through zmk-feature-input-stream itself?
+
+[zmk-feature-input-stream](https://github.com/cormoran/zmk-feature-input-stream)
+already streams key events to a web UI (enable/disable RPC +
+`KeyEventNotification{position, pressed, behavior_id, param1, param2}` +
+layer changes). An alternative architecture would record **host-side**: the
+runtime-macro web UI enables the input stream, assembles steps in the browser,
+and writes them with the existing `SetMacroStep` RPCs — zero new firmware
+code. Rejected as the primary mechanism because:
+
+1. **Wrong abstraction level.** It streams *position-level* events with the
+   active layer's binding. Macro recording wants the resolved outcome
+   (hold-tap decisions, mod-morphs, actual keycodes); recorded content would
+   not match what the user meant to capture.
+2. **No timestamps.** Delays would have to be reconstructed from browser
+   arrival times, which include transport batching/jitter; firmware-side
+   quantized delays are exact.
+3. **Silent loss.** Its notification queue drops on overflow with no sequence
+   numbers, which is fine for a live visualizer but corrupts a recording
+   undetectably (e.g. unbalanced down/up).
+4. **Doesn't cover on-device recording.** `&rmacro_rec` needs the firmware
+   engine regardless; host-side recording would create a second, lower-fidelity
+   recording path instead of one shared engine.
+5. **View/store divergence.** Quantization, size accounting, and compression
+   happen in firmware; a live view fed by raw input events would not show the
+   steps actually being stored.
+
+So the recording stream stays in this module's subsystem (steps above), and
+input-stream remains what it is — a visualizer. It still pays off as the
+**reference implementation** for the notification pipeline and the SECURED
+gating, both adopted above.
+
+**Shared risk** (applies to any custom-notification streaming, including this
+design): the custom protocol currently has a known issue where disconnecting
+mid-stream can wedge `zmk_workqueue_lowprio_work_q` waiting on the transport
+(documented in input-stream's README). Macro playback runs on the same work
+queue, so a stuck stream would also block playback. The bounded
+drop-when-full queue limits exposure, but the proper fix is a send timeout in
+the zmk fork's notification path — track as a prerequisite/companion fix for
+this feature.
 
 ### 3.5 Web UI
 

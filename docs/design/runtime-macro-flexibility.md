@@ -252,27 +252,150 @@ Per repo rules (`tests/<case>` unit tests + `tests/zmk-config` build test):
 
 ---
 
-## 3. P2 — On-device macro recording
+## 3. P2 — Macro recording: on-device and Web-driven, with live streaming
 
-QMK-style dynamic macros, no host needed:
+QMK-style dynamic macros, controllable from two frontends that share one
+recording engine: a keyboard behavior (no host needed) and start/stop RPCs
+driven from the Web UI. While recording is active, captured steps are streamed
+to the Web UI in real time via custom-subsystem notifications.
 
-- New behavior `&rmacro_rec <slot>` (`cormoran,zmk-behavior-runtime-macro-record`,
-  one param). First press starts recording into the slot (memory mode), second
-  press — or `CONFIG_ZMK_RUNTIME_MACRO_RECORD_TIMEOUT_MS` of inactivity — stops
-  it.
-- Record `zmk_keycode_state_changed` events as `DOWN`/`UP` opcodes; insert
-  `DELAY` opcodes from real inter-event timing, quantized (e.g. 10 ms) and
-  capped (e.g. 2 s) to save bytes. Exclude the recording key itself.
-- On stop: run the existing tap-compression (down+up pairs → `TAP`, consecutive
-  eligible taps → packed sequence), validate size; if the body exceeds the
-  limit, truncate at the last complete step and signal via log/UI flag.
-- Persistence: keep in memory mode; user persists via the existing Save
-  Pending flow (or `CONFIG_ZMK_RUNTIME_MACRO_RECORD_AUTOSAVE=y`).
-- Feedback hook (`recording started/stopped`) as a zmk event so users can wire
-  RGB/display indicators.
+### 3.1 Shared recording engine (`src/runtime_macro_record.c`)
 
-This is a self-contained follow-up PR; it reuses the existing format, storage,
-and playback path unchanged.
+Single state machine, independent of who started it:
+
+- States: `IDLE` → `RECORDING(slot)`. One recording at a time.
+- Capture source: `zmk_keycode_state_changed` listener → `DOWN`/`UP` steps;
+  inter-event timing becomes `DELAY` steps, quantized
+  (`CONFIG_ZMK_RUNTIME_MACRO_RECORD_DELAY_QUANT_MS`, e.g. 10 ms) and capped
+  (e.g. 2 s). A delay step is finalized only when the next key event arrives;
+  the trailing delay is dropped.
+- Steps accumulate in a record buffer
+  (`CONFIG_ZMK_RUNTIME_MACRO_RECORD_BUFFER_SIZE`); the engine also tracks the
+  incrementally encoded size. When the encoded size would exceed the body
+  limit, recording auto-stops (state notification carries the reason).
+- On stop: run the existing compression (down+up pairs → `TAP`, consecutive
+  eligible taps → packed key sequence), validate with
+  `zmk_runtime_macro_validate_encoded()`, then write to the slot in **memory
+  mode** (persist via the existing Save Pending flow,
+  `CONFIG_ZMK_RUNTIME_MACRO_RECORD_AUTOSAVE=y`, or the `persist` flag on the
+  stop RPC). Cancel discards the buffer and leaves the slot untouched.
+- Raises a local zmk event on start/stop/step so users can wire RGB/display
+  indicators, and so the RPC layer (3.3) can forward notifications without the
+  engine depending on Studio.
+- Interlock with playback: starting a recording while a macro is playing (or
+  vice versa) is refused with `-EBUSY` — otherwise playback-generated keycode
+  events would be re-captured. `&rmacro` presses of *other* slots during
+  recording are recorded as their expanded key output (documented v1
+  limitation; a behavior-level filter can come later).
+
+### 3.2 On-device frontend
+
+- New behavior `&rmacro_rec <slot>`
+  (`cormoran,zmk-behavior-runtime-macro-record`, one param). First press
+  starts recording into the slot, second press — or
+  `CONFIG_ZMK_RUNTIME_MACRO_RECORD_TIMEOUT_MS` of inactivity — stops it. The
+  toggle key's own press/release is excluded from the capture.
+
+### 3.3 RPC frontend (proto additions)
+
+```proto
+message StartRecordingRequest {
+    uint32 index = 1;
+}
+message StopRecordingRequest {
+    bool cancel = 1;   // discard instead of writing to the slot
+    bool persist = 2;  // persist immediately instead of memory mode
+}
+message GetRecordingStatusRequest {}
+
+message RecordingStatus {
+    bool active = 1;
+    uint32 index = 2;
+    uint32 step_count = 3;
+    uint32 encoded_size = 4;
+}
+message GetRecordingStatusResponse { RecordingStatus status = 1; }
+
+// StopRecording returns the final, compressed macro so the UI can show
+// the canonical form without a follow-up GetMacro.
+message StopRecordingResponse { MacroSlot macro = 1; }
+```
+
+Add to `Request`/`Response` oneofs; `StartRecording` answers with
+`StatusResponse`. Start fails (`ErrorResponse`) when already recording or when
+playback is active. `GetRecordingStatus` lets the UI resync after (re)connect.
+
+### 3.4 Live streaming to the Web UI
+
+Use the custom Studio RPC notification channel —
+`raise_zmk_studio_custom_notification()` with this module's subsystem index.
+`zmk-feature-custom-settings` (`src/studio/custom_settings_handler.c`) is the
+working reference implementation for encoding and raising custom-subsystem
+notifications.
+
+```proto
+message RecordingStateNotification {
+    enum State { STARTED = 0; STOPPED = 1; CANCELLED = 2; STOPPED_FULL = 3; }
+    State state = 1;
+    uint32 index = 2;
+    // Set when state != STARTED: total steps / bytes of the final macro.
+    uint32 step_count = 3;
+    uint32 encoded_size = 4;
+}
+message RecordingStepNotification {
+    uint32 index = 1;
+    uint32 step_index = 2;
+    MacroStep step = 3;       // the finalized step (delay steps included)
+    uint32 encoded_size = 4;  // running encoded size, for the UI size meter
+}
+message Notification {
+    oneof notification_type {
+        RecordingStateNotification recording_state = 1;
+        RecordingStepNotification recording_step = 2;
+    }
+}
+```
+
+- A step notification is sent whenever a step is *finalized* (a pending delay
+  is finalized by the following key event, so key events typically flush a
+  delay+key pair — two small notifications).
+- Notifications are best-effort: if no Studio session is connected they are
+  dropped (the record buffer, not the notification stream, is the source of
+  truth; `StopRecordingResponse` / `GetMacro` always return the full result).
+  Keystroke rate is well within the RPC transport's capacity; steps are
+  streamed raw (uncompressed) and the compressed final form arrives with the
+  stop response/notification.
+- State notifications are emitted for *all* recordings, including
+  `&rmacro_rec`-initiated ones — the Web UI live view mirrors on-device
+  recording for free, and either side may stop a recording the other started.
+
+### 3.5 Web UI
+
+- Record / Stop / Cancel buttons per slot; on `recording_state(STARTED)` the
+  slot's editor switches to a live view and appends steps from
+  `recording_step` notifications with a running byte-size meter.
+- On stop, replace the live view with the canonical macro from
+  `StopRecordingResponse` (or `GetMacro` after a `STOPPED` notification if the
+  recording was stopped from the device) and enter the normal pending-changes
+  flow (Save Pending / Discard Pending).
+- On connect, call `GetRecordingStatus` to resync into an in-progress
+  recording.
+
+### 3.6 Kconfig and tests
+
+- `CONFIG_ZMK_RUNTIME_MACRO_RECORD` — engine + `&rmacro_rec` behavior;
+  `CONFIG_ZMK_RUNTIME_MACRO_RECORD_RPC` (`depends on
+  ZMK_RUNTIME_MACRO_STUDIO_RPC`) — RPC frontend + notifications.
+- `MacroGlobalSettings` gains `bool supports_recording` so older UIs degrade
+  gracefully.
+- Tests: unit tests drive the engine with mock kscan events
+  (`tests/record-*`: capture, tap compression, size overflow auto-stop,
+  playback interlock); RPC handler test for start/stop/status; web tests for
+  notification-driven live view.
+
+Implementation order within this feature follows the repo rule
+(proto → firmware handler → web UI); the engine (3.1) plus behavior (3.2) can
+land first with the RPC/streaming layer (3.3–3.5) stacked on top.
 
 ## 4. P2 — Larger macro bodies (chunking)
 
@@ -328,6 +451,7 @@ Body limited to 64 bytes today (custom-settings protobuf cap). Two-step plan:
    boot encoder, default installation, tests, README. Include §2.6 proto flag
    if convenient (proto → firmware handler → web UI order per repo rules).
 3. **PR 3**: packed-key range extension + capability field (small, independent).
-4. **PR 4**: on-device recording (§3).
+4. **PR 4**: macro recording (§3) — engine + `&rmacro_rec` first, then the
+   start/stop RPCs and notification streaming + Web UI live view.
 5. Later: playback FIFO (§5), chunking after custom-settings redesign (§4),
    Web UI ergonomics (§7).

@@ -80,7 +80,9 @@ The runtime macro RPC also exposes `MacroGlobalSettings`, containing `tap_ms` an
 
 ## Devicetree Default Macros
 
-A macro slot's factory value can be defined at compile time in your `.keymap`/`.overlay`, so an `&rmacro` binding does something useful right after flashing, with no Studio connection required. Add one `cormoran,runtime-macro-default` node per slot:
+By default every macro slot starts empty, so a freshly flashed board needs a Studio connection before `&rmacro` does anything. To ship a macro that already works out of the box, give a slot a **devicetree default**: a factory value defined at compile time in your `.keymap`/`.overlay`, with no Studio connection required and no extra Kconfig option to enable.
+
+Add one `cormoran,runtime-macro-default` node per slot, anywhere under `/ { ... }` (it doesn't need to live inside `keymap` or `behaviors`). The simplest case just types text:
 
 ```dts
 / {
@@ -91,38 +93,41 @@ A macro slot's factory value can be defined at compile time in your `.keymap`/`.
             display-name = "Email";
             text = "user@example.com";
         };
-
-        rmacro_default_1 {
-            compatible = "cormoran,runtime-macro-default";
-            slot = <1>;
-            display-name = "Vim save";
-            bindings = <&macro_press &kp LSHFT>
-                     , <&macro_tap &kp SEMI>
-                     , <&macro_release &kp LSHFT>
-                     , <&macro_wait_time 5>
-                     , <&macro_tap &kp W &kp RET>;
-        };
     };
 };
 ```
 
-| property       | meaning                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------- |
-| `slot`         | Target macro slot index (`0` to `CONFIG_ZMK_RUNTIME_MACRO_COUNT - 1`), required.                     |
-| `display-name` | Name shown in the Web UI. Defaults to the node name.                                                 |
-| `text`         | Plain ASCII text, encoded first as a packed key-tap sequence (same encoding the Web UI uses).         |
-| `bindings`     | ZMK-native macro steps, encoded after `text`. See below for the supported subset.                    |
-| `wait-ms`      | Delay inserted between consecutive non-packed `bindings` steps. Default `0` (none).                  |
+With `&rmacro 0` bound somewhere in your keymap, pressing it types `user@example.com` immediately after flashing - before ever opening the Web UI.
+
+For steps other than plain text - modifier holds, other behaviors, explicit delays - use `bindings`, which reuses ZMK's native macro vocabulary so there's nothing new to learn. This example (added as another node next to `rmacro_default_0` above, inside the same `runtime_macro_defaults` container) holds Shift for one key, then taps `w` and `Enter` (handy as a Vim `:w<Enter>` save macro bound next to a "Vim mode" layer):
+
+```dts
+rmacro_default_1 {
+    compatible = "cormoran,runtime-macro-default";
+    slot = <1>;
+    display-name = "Vim save";
+    bindings = <&macro_press &kp LSHFT>
+             , <&macro_tap &kp SEMI>
+             , <&macro_release &kp LSHFT>
+             , <&macro_wait_time 5>
+             , <&macro_tap &kp W>
+             , <&kp RET>;
+};
+```
+
+Each comma-separated entry is one binding, same as a keymap's `bindings` list. `&macro_tap` / `&macro_press` / `&macro_release` switch the mode applied to the entries that follow (starting mode is tap) and stay in effect until changed again - the trailing `<&kp RET>` above is still a tap because mode was last set to tap. `&macro_wait_time <ms>` inserts an explicit delay. Any other behavior binding (`&kp`, `&mo`, ...) is encoded using its behavior local ID, and plain-ASCII `&kp` taps made while in tap mode are packed exactly like `text`, so mixing `text` and `bindings` in the same slot (`text` is always encoded first) doesn't cost extra bytes.
+
+| property       | meaning                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| `slot`         | Target macro slot index (`0` to `CONFIG_ZMK_RUNTIME_MACRO_COUNT - 1`), required.                  |
+| `display-name` | Name shown in the Web UI. Defaults to the node name.                                              |
+| `text`         | Plain ASCII text, encoded first as a packed key-tap sequence (same encoding the Web UI uses).      |
+| `bindings`     | ZMK-native macro steps, encoded after `text`.                                                      |
+| `wait-ms`      | Delay inserted between consecutive non-packed `bindings` steps. Default `0` (none).                |
 
 At least one of `text` or `bindings` must be set.
 
-`bindings` reuses ZMK's native macro vocabulary:
-
-- `&macro_tap` / `&macro_press` / `&macro_release` switch the mode applied to entries that follow (initial mode is tap).
-- `&macro_wait_time <ms>` inserts an explicit delay.
-- Any other behavior binding (`&kp A`, `&mo 1`, ...) is encoded using its behavior local ID. Plain-ASCII `&kp` taps in tap mode are packed the same way `text` is.
-
-A default behaves like a factory value: it shows up in the Web UI like any other macro, editing and saving it writes a normal user value that shadows the default, and **Discard Pending** / resetting the setting / erasing settings all bring the devicetree default back. If a default fails to encode (for example an unsupported character in `text`, or a `slot` that doesn't fit `CONFIG_ZMK_RUNTIME_MACRO_COUNT`), that one slot is skipped and logged - it does not fail the rest of the build.
+A default behaves like a factory value, not a one-time seed: it shows up in the Web UI like any other macro, editing and saving it writes a normal user value that shadows the default, and **Discard Pending** / resetting the setting / erasing settings all bring the devicetree default back. If a default fails to encode (for example an unsupported character in `text`, or a `slot` that doesn't fit `CONFIG_ZMK_RUNTIME_MACRO_COUNT`), that one slot is skipped and logged - it does not fail the rest of the build.
 
 ## Binary Format
 

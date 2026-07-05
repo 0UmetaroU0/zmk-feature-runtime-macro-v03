@@ -4,13 +4,22 @@
 #include <dt-bindings/zmk/kscan_mock.h>
 
 / {
+	runtime_macro_defaults {
+		rmacro_default_1 {
+			compatible = "cormoran,runtime-macro-default";
+			slot = <1>;
+			display-name = "DT Default";
+			text = "hi";
+		};
+	};
+
 	keymap {
 		compatible = "zmk,keymap";
 
 		default_layer {
 			bindings = <
 			&rmacro 0
-			&kp B
+			&rmacro 1
 			&kp C
 			&kp D
 			>;
@@ -22,5 +31,7 @@
 	events = <
 	ZMK_MOCK_PRESS(0,0,10)
 	ZMK_MOCK_RELEASE(0,0,10)
+	ZMK_MOCK_PRESS(0,1,10)
+	ZMK_MOCK_RELEASE(0,1,10)
 	>;
 };

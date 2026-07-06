@@ -15,6 +15,7 @@ import {
   encodeRuntimeMacro,
   fromKeyboardAbyssSteps,
   toKeyboardAbyssSteps,
+  textToPackedUsAnsi,
 } from "./macroCodec";
 import type { RuntimeMacroStep } from "./macroCodec";
 import type { MacroStep as RpcMacroStep } from "./proto/cormoran/runtime_macro/runtime_macro";
@@ -130,6 +131,7 @@ export function RuntimeMacroEditor() {
     number | undefined
   >(undefined);
   const [jsonText, setJsonText] = useState("[]");
+  const [plainText, setPlainText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -166,6 +168,7 @@ export function RuntimeMacroEditor() {
         const steps = macro.steps.map(runtimeStepFromRpc);
         setSelectedIndex(index);
         setLoadedMacro({ index, name: macro.name, steps });
+        setPlainText("");
         setJsonText(
           JSON.stringify(
             toKeyboardAbyssSteps(steps, { keyPressBehaviorId: keyPressId }),
@@ -270,6 +273,55 @@ export function RuntimeMacroEditor() {
     });
   };
 
+const replaceStepsWithText = () => {
+  if (!loadedMacro) return;
+
+  try {
+    const packedKeys = textToPackedUsAnsi(plainText);
+
+    const steps: RuntimeMacroStep[] =
+      packedKeys.length === 0
+        ? []
+        : [
+            {
+              action: "keySequence",
+              packedKeys,
+            },
+          ];
+
+    const encoded = encodeRuntimeMacro(steps, { keyPressBehaviorId });
+
+    if (encoded.length > maxMacroBytes) {
+      throw new Error(
+        `Encoded text macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
+      );
+    }
+
+    setLoadedMacro({
+      ...loadedMacro,
+      steps,
+    });
+
+    setJsonText(
+      JSON.stringify(
+        toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
+        null,
+        2,
+      ),
+    );
+
+    setMessage(
+      "Replaced steps with US-ANSI text. Press Save below to persist it.",
+    );
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : "Failed to convert text to macro steps",
+    );
+  }
+};
+  
   const saveMacro = async (persist: boolean) => {
     if (!loadedMacro) return;
     setIsLoading(true);
@@ -528,7 +580,31 @@ export function RuntimeMacroEditor() {
                 />
               ))}
             </div>
+            
+            <div className="text-macro-pane">
+  <label>
+    Text (US ANSI)
+    <textarea
+      value={plainText}
+      onChange={(event) => setPlainText(event.target.value)}
+      placeholder="Type US-ANSI ASCII text here"
+      rows={3}
+    />
+  </label>
 
+  <button
+    className="btn"
+    onClick={replaceStepsWithText}
+    disabled={isLoading}
+  >
+    Replace Steps with Text
+  </button>
+
+  <p>
+    Replaces all current steps. Use Save below to store the macro permanently.
+  </p>
+</div>
+            
             <div className="actions">
               <button className="btn" onClick={addStep}>
                 Add Step

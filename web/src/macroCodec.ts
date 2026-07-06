@@ -383,3 +383,80 @@ export function fromKeyboardAbyssSteps(input: unknown): RuntimeMacroStep[] {
     throw new Error(`Unsupported macro action: ${String(step.action)}`);
   });
 }
+
+const PACKED_LSFT = 0x80;
+
+const US_ANSI_PACKED_KEYS: Record<string, number> = {
+  " ": 0x2c,
+  "\t": 0x2b,
+  "\n": 0x28,
+
+  "1": 0x1e,
+  "2": 0x1f,
+  "3": 0x20,
+  "4": 0x21,
+  "5": 0x22,
+  "6": 0x23,
+  "7": 0x24,
+  "8": 0x25,
+  "9": 0x26,
+  "0": 0x27,
+
+  "-": 0x2d,
+  "_": PACKED_LSFT | 0x2d,
+  "=": 0x2e,
+  "+": PACKED_LSFT | 0x2e,
+  "[": 0x2f,
+  "{": PACKED_LSFT | 0x2f,
+  "]": 0x30,
+  "}": PACKED_LSFT | 0x30,
+  "\\": 0x31,
+  "|": PACKED_LSFT | 0x31,
+  ";": 0x33,
+  ":": PACKED_LSFT | 0x33,
+  "'": 0x34,
+  '"': PACKED_LSFT | 0x34,
+  "`": 0x35,
+  "~": PACKED_LSFT | 0x35,
+  ",": 0x36,
+  "<": PACKED_LSFT | 0x36,
+  ".": 0x37,
+  ">": PACKED_LSFT | 0x37,
+  "/": 0x38,
+  "?": PACKED_LSFT | 0x38,
+
+  "!": PACKED_LSFT | 0x1e,
+  "@": PACKED_LSFT | 0x1f,
+  "#": PACKED_LSFT | 0x20,
+  "$": PACKED_LSFT | 0x21,
+  "%": PACKED_LSFT | 0x22,
+  "^": PACKED_LSFT | 0x23,
+  "&": PACKED_LSFT | 0x24,
+  "*": PACKED_LSFT | 0x25,
+  "(": PACKED_LSFT | 0x26,
+  ")": PACKED_LSFT | 0x27,
+};
+
+for (let index = 0; index < 26; index += 1) {
+  const lower = String.fromCharCode("a".charCodeAt(0) + index);
+  const usage = 0x04 + index;
+
+  US_ANSI_PACKED_KEYS[lower] = usage;
+  US_ANSI_PACKED_KEYS[lower.toUpperCase()] = PACKED_LSFT | usage;
+}
+
+export function textToPackedUsAnsi(text: string): number[] {
+  return Array.from(text, (character) => {
+    const packedKey = US_ANSI_PACKED_KEYS[character];
+
+    if (packedKey === undefined) {
+      throw new Error(
+        `Unsupported text character ${JSON.stringify(
+          character,
+        )}. Use US-ANSI ASCII only.`,
+      );
+    }
+
+    return packedKey;
+  });
+}

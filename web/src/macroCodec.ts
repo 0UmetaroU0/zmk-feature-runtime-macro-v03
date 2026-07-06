@@ -1,9 +1,5 @@
 export type RuntimeMacroAction =
-  | "down"
-  | "up"
-  | "tap"
-  | "delay"
-  | "keySequence";
+  "down" | "up" | "tap" | "delay" | "keySequence";
 
 export type RuntimeMacroStep =
   | {
@@ -46,11 +42,13 @@ function assertUint32(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
     throw new Error(`${label} must be an unsigned 32-bit integer`);
   }
+
   return value;
 }
 
 function writeUvar(bytes: number[], value: number, label: string) {
   let remaining = assertUint32(value, label);
+
   do {
     let byte = remaining & 0x7f;
     remaining >>>= 7;
@@ -76,11 +74,13 @@ function readUvar(bytes: Uint8Array, offset: { value: number }): number {
 function packKeyTap(keycode: number): number | null {
   const uintKeycode = assertUint32(keycode, "keycode");
   const mods = uintKeycode >>> 24;
+
   if ((mods & ~MOD_LSFT) !== 0) return null;
 
   const usageKeycode = uintKeycode & ~(0xff << 24);
   const page = (usageKeycode >>> 16) & 0xff;
   const usage = usageKeycode & 0xffff;
+
   if (
     page !== HID_USAGE_KEY ||
     usage < PACKED_MIN_USAGE ||
@@ -109,6 +109,7 @@ function unpackKeyTap(packedKey: number): number {
 function writeKeySequence(bytes: number[], packedKeys: number[]) {
   bytes.push(OPCODES.keySequence);
   writeUvar(bytes, packedKeys.length, "packed key count");
+
   for (const packedKey of packedKeys) {
     unpackKeyTap(packedKey);
     bytes.push(packedKey);
@@ -117,7 +118,7 @@ function writeKeySequence(bytes: number[], packedKeys: number[]) {
 
 function readKeySequence(
   bytes: Uint8Array,
-  offset: { value: number }
+  offset: { value: number },
 ): number[] {
   const length = readUvar(bytes, offset);
   if (offset.value + length > bytes.length) {
@@ -130,12 +131,13 @@ function readKeySequence(
     unpackKeyTap(packedKey);
     packedKeys.push(packedKey);
   }
+
   return packedKeys;
 }
 
 function packedTapKey(
   step: RuntimeMacroStep,
-  options: RuntimeMacroCodecOptions
+  options: RuntimeMacroCodecOptions,
 ): number | null {
   if (
     step.action !== "tap" ||
@@ -150,7 +152,7 @@ function packedTapKey(
 
 export function compactKeyTapSteps(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {}
+  options: RuntimeMacroCodecOptions = {},
 ): RuntimeMacroStep[] {
   const compacted: RuntimeMacroStep[] = [];
   let packedBuffer: number[] = [];
@@ -185,7 +187,7 @@ export function compactKeyTapSteps(
 
 export function encodeRuntimeMacro(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {}
+  options: RuntimeMacroCodecOptions = {},
 ): Uint8Array {
   const bytes = [FORMAT_VERSION];
 
@@ -196,7 +198,6 @@ export function encodeRuntimeMacro(
     }
 
     bytes.push(OPCODES[step.action]);
-
     if (step.action === "delay") {
       writeUvar(bytes, step.delayMs, "delayMs");
       continue;
@@ -269,7 +270,7 @@ type AbyssMacroStep =
     };
 
 function bindingToRawZmk(
-  step: Exclude<RuntimeMacroStep, { action: "delay" | "keySequence" }>
+  step: Exclude<RuntimeMacroStep, { action: "delay" | "keySequence" }>,
 ) {
   return `local-id:${step.behaviorId} ${step.param1} ${step.param2}`;
 }
@@ -282,7 +283,7 @@ function parseRawZmkBinding(binding: unknown) {
   const raw = binding as { type?: unknown; zmk?: unknown };
   if (raw.type !== "raw" || typeof raw.zmk !== "string") {
     throw new Error(
-      "Only raw zmk bindings exported by this UI can be imported"
+      "Only raw zmk bindings exported by this UI can be imported",
     );
   }
 
@@ -300,7 +301,7 @@ function parseRawZmkBinding(binding: unknown) {
 
 export function toKeyboardAbyssSteps(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {}
+  options: RuntimeMacroCodecOptions = {},
 ): AbyssMacroStep[] {
   return steps.flatMap((step): AbyssMacroStep[] => {
     if (step.action === "delay") {
@@ -313,7 +314,7 @@ export function toKeyboardAbyssSteps(
         binding: {
           type: "raw",
           zmk: `local-id:${options.keyPressBehaviorId ?? 0} ${unpackKeyTap(
-            packedKey
+            packedKey,
           )} 0`,
           label: `Packed key 0x${packedKey.toString(16).padStart(2, "0")}`,
         },
@@ -337,7 +338,7 @@ export function toKeyboardAbyssSteps(
 export function fromKeyboardAbyssSteps(input: unknown): RuntimeMacroStep[] {
   if (!Array.isArray(input)) {
     throw new Error(
-      "Keyboard Abyss macro JSON must be an array of macro steps"
+      "Keyboard Abyss macro JSON must be an array of macro steps",
     );
   }
 
@@ -366,25 +367,23 @@ export function fromKeyboardAbyssSteps(input: unknown): RuntimeMacroStep[] {
       step.action === "tap"
     ) {
       const binding = parseRawZmkBinding(step.binding);
+
       if (step.action === "tap") {
         if (step.tapTime !== undefined) {
           throw new Error(
-            "tapTime is global in this firmware; use down-delay-up for per-step time"
+            "tapTime is global in this firmware; use down-delay-up for per-step time",
           );
         }
-        return {
-          action: "tap",
-          ...binding,
-        };
+
+        return { action: "tap", ...binding };
       }
+
       return { action: step.action, ...binding };
     }
 
     throw new Error(`Unsupported macro action: ${String(step.action)}`);
   });
 }
-
-const PACKED_LSFT = 0x80;
 
 const US_ANSI_PACKED_KEYS: Record<string, number> = {
   " ": 0x2c,
@@ -460,4 +459,3 @@ export function textToPackedUsAnsi(text: string): number[] {
     return packedKey;
   });
 }
-

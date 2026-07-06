@@ -403,7 +403,7 @@ const US_ANSI_PACKED_KEYS: Record<string, number> = {
   "0": 0x27,
 
   "-": 0x2d,
-  "_": PACKED_LSFT | 0x2d,
+  _: PACKED_LSFT | 0x2d,
   "=": 0x2e,
   "+": PACKED_LSFT | 0x2e,
   "[": 0x2f,
@@ -428,7 +428,7 @@ const US_ANSI_PACKED_KEYS: Record<string, number> = {
   "!": PACKED_LSFT | 0x1e,
   "@": PACKED_LSFT | 0x1f,
   "#": PACKED_LSFT | 0x20,
-  "$": PACKED_LSFT | 0x21,
+  $: PACKED_LSFT | 0x21,
   "%": PACKED_LSFT | 0x22,
   "^": PACKED_LSFT | 0x23,
   "&": PACKED_LSFT | 0x24,
@@ -460,3 +460,4 @@ export function textToPackedUsAnsi(text: string): number[] {
     return packedKey;
   });
 }
+

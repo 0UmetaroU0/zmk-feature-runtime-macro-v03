@@ -153,7 +153,7 @@ export function RuntimeMacroEditor() {
       if (response.error) throw new Error(response.error.message);
       return response;
     },
-    [connection, subsystemIndex]
+    [connection, subsystemIndex],
   );
 
   const loadMacro = useCallback(
@@ -173,18 +173,18 @@ export function RuntimeMacroEditor() {
           JSON.stringify(
             toKeyboardAbyssSteps(steps, { keyPressBehaviorId: keyPressId }),
             null,
-            2
-          )
+            2,
+          ),
         );
       } catch (error) {
         setMessage(
-          error instanceof Error ? error.message : "Failed to load macro"
+          error instanceof Error ? error.message : "Failed to load macro",
         );
       } finally {
         setIsLoading(false);
       }
     },
-    [callRPC, keyPressBehaviorId]
+    [callRPC, keyPressBehaviorId],
   );
 
   const refreshList = useCallback(async () => {
@@ -198,11 +198,11 @@ export function RuntimeMacroEditor() {
           index: macro.index,
           name: macro.name,
           encodedSize: macro.encodedSize,
-        }))
+        })),
       );
       setMaxMacroBytes(response.listMacros?.maxMacroBytes || 64);
       const globalSettings = await callRPC(
-        Request.create({ getMacroGlobalSettings: {} })
+        Request.create({ getMacroGlobalSettings: {} }),
       );
       const settings = globalSettings.getMacroGlobalSettings?.settings;
       const nextKeyPressBehaviorId = settings?.keyPressBehaviorId || undefined;
@@ -211,12 +211,12 @@ export function RuntimeMacroEditor() {
       if (list.length > 0) {
         await loadMacro(
           list[Math.min(selectedIndex, list.length - 1)].index,
-          nextKeyPressBehaviorId
+          nextKeyPressBehaviorId,
         );
       }
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to list macros"
+        error instanceof Error ? error.message : "Failed to list macros",
       );
     } finally {
       setIsLoading(false);
@@ -247,7 +247,7 @@ export function RuntimeMacroEditor() {
     setLoadedMacro({
       ...loadedMacro,
       steps: loadedMacro.steps.map((step, index) =>
-        index === stepIndex ? nextStep : step
+        index === stepIndex ? nextStep : step,
       ),
     });
   };
@@ -260,8 +260,8 @@ export function RuntimeMacroEditor() {
       JSON.stringify(
         toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
         null,
-        2
-      )
+        2,
+      ),
     );
   };
 
@@ -273,55 +273,55 @@ export function RuntimeMacroEditor() {
     });
   };
 
-const replaceStepsWithText = () => {
-  if (!loadedMacro) return;
+  const replaceStepsWithText = () => {
+    if (!loadedMacro) return;
 
-  try {
-    const packedKeys = textToPackedUsAnsi(plainText);
+    try {
+      const packedKeys = textToPackedUsAnsi(plainText);
 
-    const steps: RuntimeMacroStep[] =
-      packedKeys.length === 0
-        ? []
-        : [
-            {
-              action: "keySequence",
-              packedKeys,
-            },
-          ];
+      const steps: RuntimeMacroStep[] =
+        packedKeys.length === 0
+          ? []
+          : [
+              {
+                action: "keySequence",
+                packedKeys,
+              },
+            ];
 
-    const encoded = encodeRuntimeMacro(steps, { keyPressBehaviorId });
+      const encoded = encodeRuntimeMacro(steps, { keyPressBehaviorId });
 
-    if (encoded.length > maxMacroBytes) {
-      throw new Error(
-        `Encoded text macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
+      if (encoded.length > maxMacroBytes) {
+        throw new Error(
+          `Encoded text macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
+        );
+      }
+
+      setLoadedMacro({
+        ...loadedMacro,
+        steps,
+      });
+
+      setJsonText(
+        JSON.stringify(
+          toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
+          null,
+          2,
+        ),
+      );
+
+      setMessage(
+        "Replaced steps with US-ANSI text. Press Save below to persist it.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to convert text to macro steps",
       );
     }
+  };
 
-    setLoadedMacro({
-      ...loadedMacro,
-      steps,
-    });
-
-    setJsonText(
-      JSON.stringify(
-        toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
-        null,
-        2,
-      ),
-    );
-
-    setMessage(
-      "Replaced steps with US-ANSI text. Press Save below to persist it.",
-    );
-  } catch (error) {
-    setMessage(
-      error instanceof Error
-        ? error.message
-        : "Failed to convert text to macro steps",
-    );
-  }
-};
-  
   const saveMacro = async (persist: boolean) => {
     if (!loadedMacro) return;
     setIsLoading(true);
@@ -333,7 +333,7 @@ const replaceStepsWithText = () => {
       const encodedMacro = encodeRuntimeMacro(rpcSteps, codecOptions);
       if (encodedMacro.length > maxMacroBytes) {
         throw new Error(
-          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`
+          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`,
         );
       }
 
@@ -344,7 +344,7 @@ const replaceStepsWithText = () => {
             name: loadedMacro.name,
             persist,
           },
-        })
+        }),
       );
       await callRPC(
         Request.create({
@@ -353,7 +353,7 @@ const replaceStepsWithText = () => {
             stepCount: rpcSteps.length,
             persist,
           },
-        })
+        }),
       );
       for (const [stepIndex, step] of rpcSteps.entries()) {
         await callRPC(
@@ -364,20 +364,20 @@ const replaceStepsWithText = () => {
               step: runtimeStepToRpc(step),
               persist,
             },
-          })
+          }),
         );
       }
 
       setJsonText(
-        JSON.stringify(toKeyboardAbyssSteps(rpcSteps, codecOptions), null, 2)
+        JSON.stringify(toKeyboardAbyssSteps(rpcSteps, codecOptions), null, 2),
       );
       setMessage(
-        persist ? "Saved to persistent settings" : "Updated in memory"
+        persist ? "Saved to persistent settings" : "Updated in memory",
       );
       await refreshList();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to save macro"
+        error instanceof Error ? error.message : "Failed to save macro",
       );
     } finally {
       setIsLoading(false);
@@ -395,16 +395,16 @@ const replaceStepsWithText = () => {
             tapMs,
             persist,
           },
-        })
+        }),
       );
       setMessage(
         persist
           ? "Saved tap_ms to persistent settings"
-          : "Updated tap_ms in memory"
+          : "Updated tap_ms in memory",
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to save tap_ms"
+        error instanceof Error ? error.message : "Failed to save tap_ms",
       );
     } finally {
       setIsLoading(false);
@@ -423,17 +423,17 @@ const replaceStepsWithText = () => {
             index: loadedMacro.index,
             persist,
           },
-        })
+        }),
       );
       setLoadedMacro({ index: loadedMacro.index, name: "", steps: [] });
       setJsonText("[]");
       setMessage(
-        persist ? "Deleted from persistent settings" : "Deleted in memory"
+        persist ? "Deleted from persistent settings" : "Deleted in memory",
       );
       await refreshList();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to delete macro"
+        error instanceof Error ? error.message : "Failed to delete macro",
       );
     } finally {
       setIsLoading(false);
@@ -447,21 +447,21 @@ const replaceStepsWithText = () => {
     try {
       const response = await callRPC(
         Request.create(
-          action === "save" ? { saveMacros: {} } : { discardMacros: {} }
-        )
+          action === "save" ? { saveMacros: {} } : { discardMacros: {} },
+        ),
       );
       await refreshList();
       setMessage(
         response.status?.message ??
           (action === "save"
             ? "Saved pending macro changes"
-            : "Discarded pending macro changes")
+            : "Discarded pending macro changes"),
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : `Failed to ${action} pending macro changes`
+          : `Failed to ${action} pending macro changes`,
       );
     } finally {
       setIsLoading(false);
@@ -474,19 +474,19 @@ const replaceStepsWithText = () => {
       const codecOptions = { keyPressBehaviorId };
       const steps = compactKeyTapSteps(
         fromKeyboardAbyssSteps(JSON.parse(jsonText)),
-        codecOptions
+        codecOptions,
       );
       const encoded = encodeRuntimeMacro(steps, codecOptions);
       if (encoded.length > maxMacroBytes) {
         throw new Error(
-          `Imported macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`
+          `Imported macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
         );
       }
       setLoadedMacro({ ...loadedMacro, steps });
       setMessage("Imported Keyboard Abyss macro steps");
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to import JSON"
+        error instanceof Error ? error.message : "Failed to import JSON",
       );
     }
   };
@@ -580,31 +580,31 @@ const replaceStepsWithText = () => {
                 />
               ))}
             </div>
-            
+
             <div className="text-macro-pane">
-  <label>
-    Text (US ANSI)
-    <textarea
-      value={plainText}
-      onChange={(event) => setPlainText(event.target.value)}
-      placeholder="Type US-ANSI ASCII text here"
-      rows={3}
-    />
-  </label>
+              <label>
+                Text (US ANSI)
+                <textarea
+                  value={plainText}
+                  onChange={(event) => setPlainText(event.target.value)}
+                  placeholder="Type US-ANSI ASCII text here"
+                  rows={3}
+                />
+              </label>
 
-  <button
-    className="btn"
-    onClick={replaceStepsWithText}
-    disabled={isLoading}
-  >
-    Replace Steps with Text
-  </button>
+              <button
+                className="btn"
+                onClick={replaceStepsWithText}
+                disabled={isLoading}
+              >
+                Replace Steps with Text
+              </button>
 
-  <p>
-    Replaces all current steps. Use Save below to store the macro permanently.
-  </p>
-</div>
-            
+              <p>
+                Replaces all current steps. Use Save below to store the macro
+                permanently.
+              </p>
+            </div>
             <div className="actions">
               <button className="btn" onClick={addStep}>
                 Add Step

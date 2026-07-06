@@ -1,12 +1,15 @@
 name: Test and Build Web UI
 
 on:
+  workflow_dispatch:
+
   push:
     branches: ["main"]
     paths:
       - "web/**"
       - ".github/workflows/web-ui.yml"
       - "proto/**"
+
   pull_request:
     paths:
       - "web/**"

@@ -1,5 +1,9 @@
 export type RuntimeMacroAction =
-  "down" | "up" | "tap" | "delay" | "keySequence";
+  | "down"
+  | "up"
+  | "tap"
+  | "delay"
+  | "keySequence";
 
 export type RuntimeMacroStep =
   | {
@@ -118,7 +122,7 @@ function writeKeySequence(bytes: number[], packedKeys: number[]) {
 
 function readKeySequence(
   bytes: Uint8Array,
-  offset: { value: number },
+  offset: { value: number }
 ): number[] {
   const length = readUvar(bytes, offset);
   if (offset.value + length > bytes.length) {
@@ -137,7 +141,7 @@ function readKeySequence(
 
 function packedTapKey(
   step: RuntimeMacroStep,
-  options: RuntimeMacroCodecOptions,
+  options: RuntimeMacroCodecOptions
 ): number | null {
   if (
     step.action !== "tap" ||
@@ -152,7 +156,7 @@ function packedTapKey(
 
 export function compactKeyTapSteps(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {},
+  options: RuntimeMacroCodecOptions = {}
 ): RuntimeMacroStep[] {
   const compacted: RuntimeMacroStep[] = [];
   let packedBuffer: number[] = [];
@@ -187,7 +191,7 @@ export function compactKeyTapSteps(
 
 export function encodeRuntimeMacro(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {},
+  options: RuntimeMacroCodecOptions = {}
 ): Uint8Array {
   const bytes = [FORMAT_VERSION];
 
@@ -270,7 +274,7 @@ type AbyssMacroStep =
     };
 
 function bindingToRawZmk(
-  step: Exclude<RuntimeMacroStep, { action: "delay" | "keySequence" }>,
+  step: Exclude<RuntimeMacroStep, { action: "delay" | "keySequence" }>
 ) {
   return `local-id:${step.behaviorId} ${step.param1} ${step.param2}`;
 }
@@ -283,7 +287,7 @@ function parseRawZmkBinding(binding: unknown) {
   const raw = binding as { type?: unknown; zmk?: unknown };
   if (raw.type !== "raw" || typeof raw.zmk !== "string") {
     throw new Error(
-      "Only raw zmk bindings exported by this UI can be imported",
+      "Only raw zmk bindings exported by this UI can be imported"
     );
   }
 
@@ -301,7 +305,7 @@ function parseRawZmkBinding(binding: unknown) {
 
 export function toKeyboardAbyssSteps(
   steps: RuntimeMacroStep[],
-  options: RuntimeMacroCodecOptions = {},
+  options: RuntimeMacroCodecOptions = {}
 ): AbyssMacroStep[] {
   return steps.flatMap((step): AbyssMacroStep[] => {
     if (step.action === "delay") {
@@ -314,7 +318,7 @@ export function toKeyboardAbyssSteps(
         binding: {
           type: "raw",
           zmk: `local-id:${options.keyPressBehaviorId ?? 0} ${unpackKeyTap(
-            packedKey,
+            packedKey
           )} 0`,
           label: `Packed key 0x${packedKey.toString(16).padStart(2, "0")}`,
         },
@@ -338,7 +342,7 @@ export function toKeyboardAbyssSteps(
 export function fromKeyboardAbyssSteps(input: unknown): RuntimeMacroStep[] {
   if (!Array.isArray(input)) {
     throw new Error(
-      "Keyboard Abyss macro JSON must be an array of macro steps",
+      "Keyboard Abyss macro JSON must be an array of macro steps"
     );
   }
 
@@ -371,7 +375,7 @@ export function fromKeyboardAbyssSteps(input: unknown): RuntimeMacroStep[] {
       if (step.action === "tap") {
         if (step.tapTime !== undefined) {
           throw new Error(
-            "tapTime is global in this firmware; use down-delay-up for per-step time",
+            "tapTime is global in this firmware; use down-delay-up for per-step time"
           );
         }
 
@@ -451,8 +455,8 @@ export function textToPackedUsAnsi(text: string): number[] {
     if (packedKey === undefined) {
       throw new Error(
         `Unsupported text character ${JSON.stringify(
-          character,
-        )}. Use US-ANSI ASCII only.`,
+          character
+        )}. Use US-ANSI ASCII only.`
       );
     }
 

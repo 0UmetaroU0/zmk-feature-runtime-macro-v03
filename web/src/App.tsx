@@ -153,7 +153,7 @@ export function RuntimeMacroEditor() {
       if (response.error) throw new Error(response.error.message);
       return response;
     },
-    [connection, subsystemIndex]
+    [connection, subsystemIndex],
   );
 
   const loadMacro = useCallback(
@@ -173,18 +173,18 @@ export function RuntimeMacroEditor() {
           JSON.stringify(
             toKeyboardAbyssSteps(steps, { keyPressBehaviorId: keyPressId }),
             null,
-            2
-          )
+            2,
+          ),
         );
       } catch (error) {
         setMessage(
-          error instanceof Error ? error.message : "Failed to load macro"
+          error instanceof Error ? error.message : "Failed to load macro",
         );
       } finally {
         setIsLoading(false);
       }
     },
-    [callRPC, keyPressBehaviorId]
+    [callRPC, keyPressBehaviorId],
   );
 
   const refreshList = useCallback(async () => {
@@ -198,11 +198,11 @@ export function RuntimeMacroEditor() {
           index: macro.index,
           name: macro.name,
           encodedSize: macro.encodedSize,
-        }))
+        })),
       );
       setMaxMacroBytes(response.listMacros?.maxMacroBytes || 64);
       const globalSettings = await callRPC(
-        Request.create({ getMacroGlobalSettings: {} })
+        Request.create({ getMacroGlobalSettings: {} }),
       );
       const settings = globalSettings.getMacroGlobalSettings?.settings;
       const nextKeyPressBehaviorId = settings?.keyPressBehaviorId || undefined;
@@ -211,12 +211,12 @@ export function RuntimeMacroEditor() {
       if (list.length > 0) {
         await loadMacro(
           list[Math.min(selectedIndex, list.length - 1)].index,
-          nextKeyPressBehaviorId
+          nextKeyPressBehaviorId,
         );
       }
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to list macros"
+        error instanceof Error ? error.message : "Failed to list macros",
       );
     } finally {
       setIsLoading(false);
@@ -247,7 +247,7 @@ export function RuntimeMacroEditor() {
     setLoadedMacro({
       ...loadedMacro,
       steps: loadedMacro.steps.map((step, index) =>
-        index === stepIndex ? nextStep : step
+        index === stepIndex ? nextStep : step,
       ),
     });
   };
@@ -260,8 +260,8 @@ export function RuntimeMacroEditor() {
       JSON.stringify(
         toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
         null,
-        2
-      )
+        2,
+      ),
     );
   };
 
@@ -293,7 +293,7 @@ export function RuntimeMacroEditor() {
 
       if (encoded.length > maxMacroBytes) {
         throw new Error(
-          `Encoded text macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`
+          `Encoded text macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
         );
       }
 
@@ -306,18 +306,18 @@ export function RuntimeMacroEditor() {
         JSON.stringify(
           toKeyboardAbyssSteps(steps, { keyPressBehaviorId }),
           null,
-          2
-        )
+          2,
+        ),
       );
 
       setMessage(
-        "Replaced steps with US-ANSI text. Press Save below to persist it."
+        "Replaced steps with US-ANSI text. Press Save below to persist it.",
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : "Failed to convert text to macro steps"
+          : "Failed to convert text to macro steps",
       );
     }
   };
@@ -333,7 +333,7 @@ export function RuntimeMacroEditor() {
       const encodedMacro = encodeRuntimeMacro(rpcSteps, codecOptions);
       if (encodedMacro.length > maxMacroBytes) {
         throw new Error(
-          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`
+          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`,
         );
       }
 
@@ -344,7 +344,7 @@ export function RuntimeMacroEditor() {
             name: loadedMacro.name,
             persist,
           },
-        })
+        }),
       );
       await callRPC(
         Request.create({
@@ -353,7 +353,7 @@ export function RuntimeMacroEditor() {
             stepCount: rpcSteps.length,
             persist,
           },
-        })
+        }),
       );
       for (const [stepIndex, step] of rpcSteps.entries()) {
         await callRPC(
@@ -364,20 +364,132 @@ export function RuntimeMacroEditor() {
               step: runtimeStepToRpc(step),
               persist,
             },
-          })
+          }),
         );
       }
 
       setJsonText(
-        JSON.stringify(toKeyboardAbyssSteps(rpcSteps, codecOptions), null, 2)
+        JSON.stringify(toKeyboardAbyssSteps(rpcSteps, codecOptions), null, 2),
       );
       setMessage(
-        persist ? "Saved to persistent settings" : "Updated in memory"
+        persist ? "Saved to persistent settings" : "Updated in memory",
       );
       await refreshList();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to save macro"
+        error instanceof Error ? error.message : "Failed to save macro",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const diagnosticSetMacroName = async () => {
+    if (!loadedMacro) return;
+
+    setIsLoading(true);
+    setMessage("START: setMacroName");
+
+    try {
+      await callRPC(
+        Request.create({
+          setMacroName: {
+            index: loadedMacro.index,
+            name: loadedMacro.name,
+            persist: false,
+          },
+        }),
+      );
+
+      setMessage("PASS: setMacroName");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `FAIL setMacroName: ${error.message}`
+          : "FAIL: setMacroName",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const diagnosticSetMacroStepCount = async () => {
+    if (!loadedMacro) return;
+
+    setIsLoading(true);
+    setMessage("START: setMacroStepCount");
+
+    try {
+      const codecOptions = { keyPressBehaviorId };
+      const rpcSteps = compactKeyTapSteps(loadedMacro.steps, codecOptions);
+      const encodedMacro = encodeRuntimeMacro(rpcSteps, codecOptions);
+
+      if (encodedMacro.length > maxMacroBytes) {
+        throw new Error(
+          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`,
+        );
+      }
+
+      await callRPC(
+        Request.create({
+          setMacroStepCount: {
+            index: loadedMacro.index,
+            stepCount: rpcSteps.length,
+            persist: false,
+          },
+        }),
+      );
+
+      setMessage(`PASS: setMacroStepCount (${rpcSteps.length} step)`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `FAIL setMacroStepCount: ${error.message}`
+          : "FAIL: setMacroStepCount",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const diagnosticSetMacroStep0 = async () => {
+    if (!loadedMacro) return;
+
+    setIsLoading(true);
+    setMessage("START: setMacroStep index 0");
+
+    try {
+      const codecOptions = { keyPressBehaviorId };
+      const rpcSteps = compactKeyTapSteps(loadedMacro.steps, codecOptions);
+      const encodedMacro = encodeRuntimeMacro(rpcSteps, codecOptions);
+
+      if (encodedMacro.length > maxMacroBytes) {
+        throw new Error(
+          `Encoded macro is ${encodedMacro.length} bytes; limit is ${maxMacroBytes}`,
+        );
+      }
+
+      if (rpcSteps.length === 0) {
+        throw new Error("No step exists. Use Replace Steps with Text first.");
+      }
+
+      await callRPC(
+        Request.create({
+          setMacroStep: {
+            index: loadedMacro.index,
+            stepIndex: 0,
+            step: runtimeStepToRpc(rpcSteps[0]),
+            persist: false,
+          },
+        }),
+      );
+
+      setMessage("PASS: setMacroStep index 0");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `FAIL setMacroStep index 0: ${error.message}`
+          : "FAIL: setMacroStep index 0",
       );
     } finally {
       setIsLoading(false);
@@ -395,16 +507,16 @@ export function RuntimeMacroEditor() {
             tapMs,
             persist,
           },
-        })
+        }),
       );
       setMessage(
         persist
           ? "Saved tap_ms to persistent settings"
-          : "Updated tap_ms in memory"
+          : "Updated tap_ms in memory",
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to save tap_ms"
+        error instanceof Error ? error.message : "Failed to save tap_ms",
       );
     } finally {
       setIsLoading(false);
@@ -423,17 +535,17 @@ export function RuntimeMacroEditor() {
             index: loadedMacro.index,
             persist,
           },
-        })
+        }),
       );
       setLoadedMacro({ index: loadedMacro.index, name: "", steps: [] });
       setJsonText("[]");
       setMessage(
-        persist ? "Deleted from persistent settings" : "Deleted in memory"
+        persist ? "Deleted from persistent settings" : "Deleted in memory",
       );
       await refreshList();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to delete macro"
+        error instanceof Error ? error.message : "Failed to delete macro",
       );
     } finally {
       setIsLoading(false);
@@ -447,21 +559,21 @@ export function RuntimeMacroEditor() {
     try {
       const response = await callRPC(
         Request.create(
-          action === "save" ? { saveMacros: {} } : { discardMacros: {} }
-        )
+          action === "save" ? { saveMacros: {} } : { discardMacros: {} },
+        ),
       );
       await refreshList();
       setMessage(
         response.status?.message ??
           (action === "save"
             ? "Saved pending macro changes"
-            : "Discarded pending macro changes")
+            : "Discarded pending macro changes"),
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : `Failed to ${action} pending macro changes`
+          : `Failed to ${action} pending macro changes`,
       );
     } finally {
       setIsLoading(false);
@@ -474,19 +586,19 @@ export function RuntimeMacroEditor() {
       const codecOptions = { keyPressBehaviorId };
       const steps = compactKeyTapSteps(
         fromKeyboardAbyssSteps(JSON.parse(jsonText)),
-        codecOptions
+        codecOptions,
       );
       const encoded = encodeRuntimeMacro(steps, codecOptions);
       if (encoded.length > maxMacroBytes) {
         throw new Error(
-          `Imported macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`
+          `Imported macro is ${encoded.length} bytes; limit is ${maxMacroBytes}`,
         );
       }
       setLoadedMacro({ ...loadedMacro, steps });
       setMessage("Imported Keyboard Abyss macro steps");
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to import JSON"
+        error instanceof Error ? error.message : "Failed to import JSON",
       );
     }
   };
@@ -609,13 +721,39 @@ export function RuntimeMacroEditor() {
               <button className="btn" onClick={addStep}>
                 Add Step
               </button>
+
+              <button
+                className="btn"
+                onClick={diagnosticSetMacroName}
+                disabled={isLoading}
+              >
+                Test 1: Name only
+              </button>
+
+              <button
+                className="btn"
+                onClick={diagnosticSetMacroStepCount}
+                disabled={isLoading}
+              >
+                Test 2: Step count only
+              </button>
+
+              <button
+                className="btn"
+                onClick={diagnosticSetMacroStep0}
+                disabled={isLoading}
+              >
+                Test 3: Step 0 only
+              </button>
+
               <button
                 className="btn"
                 onClick={() => saveMacro(false)}
                 disabled={isLoading}
               >
-                Write Memory
+                Write Memory (all RPCs)
               </button>
+
               <button
                 className="btn primary"
                 onClick={() => saveMacro(true)}
@@ -623,6 +761,7 @@ export function RuntimeMacroEditor() {
               >
                 Save
               </button>
+
               <button
                 className="btn"
                 onClick={() => applyPendingMacros("save")}
@@ -630,6 +769,7 @@ export function RuntimeMacroEditor() {
               >
                 Save Pending
               </button>
+
               <button
                 className="btn"
                 onClick={() => applyPendingMacros("discard")}
@@ -637,6 +777,7 @@ export function RuntimeMacroEditor() {
               >
                 Discard Pending
               </button>
+
               <button
                 className="btn danger"
                 onClick={() => deleteMacro(false)}
@@ -644,6 +785,7 @@ export function RuntimeMacroEditor() {
               >
                 Delete Memory
               </button>
+
               <button
                 className="btn danger"
                 onClick={() => deleteMacro(true)}

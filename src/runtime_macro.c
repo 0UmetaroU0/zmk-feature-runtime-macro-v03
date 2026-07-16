@@ -637,8 +637,32 @@ int zmk_runtime_macro_write(uint32_t index, const char *name, const uint8_t *enc
         memcpy(body_value.bytes_value, encoded, encoded_size);
     }
 
-    return zmk_custom_setting_write_array_by_key(
+        ret = zmk_custom_setting_write_array_by_key(
         ZMK_RUNTIME_MACRO_SUBSYSTEM_ID, ZMK_RUNTIME_MACRO_BODIES_KEY, index, &body_value, mode);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /*
+     * Diagnostic: immediately read the macro body back from Custom Settings
+     * and verify that the stored memory value matches the requested value.
+     */
+    memset(&body_value, 0, sizeof(body_value));
+
+    ret = zmk_custom_setting_read_array_by_key(
+        ZMK_RUNTIME_MACRO_SUBSYSTEM_ID, ZMK_RUNTIME_MACRO_BODIES_KEY, index, &body_value);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (body_value.type != ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES ||
+        body_value.size != encoded_size ||
+        (encoded_size > 0 &&
+         memcmp(body_value.bytes_value, encoded, encoded_size) != 0)) {
+        return -EIO;
+    }
+
+    return 0;
 }
 
 int zmk_runtime_macro_play(uint32_t index, const struct zmk_behavior_binding_event *event) {
